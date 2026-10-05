@@ -194,50 +194,6 @@ Verify it's running: halt and the PC sits inside the delay loop (~`0x2c`), and
 
 ---
 
-## The C version (`dci.c`)
-
-`dci.py` leans on pyOCD to reach the probe. `dci.c` does the same job with no
-Python and no pyOCD: it speaks **CMSIS-DAP v2 over USB bulk** to the probe
-directly (via libusb), implements the ADIv5 DP/AP register transfers itself, and
-runs the identical DCI mailbox logic on top. It's a faithful, line-for-line port —
-useful if you want to understand every layer, or run this on a box without pyOCD.
-
-```sh
-brew install libusb      # one-time
-make                     # builds ./dci
-./dci status             # read lock status (safe)
-./dci erase              # device-erase + unlock (destructive)
-```
-
-What it does under the hood, in order:
-
-1. **USB discovery** — finds the vendor interface whose string contains
-   `CMSIS-DAP`, grabs its bulk IN/OUT endpoints, claims it.
-2. **DAP setup** — `DAP_Connect`(SWD), `DAP_SWJ_Clock`(1 MHz),
-   `DAP_TransferConfigure`, then a `DAP_SWJ_Sequence` line-reset + JTAG-to-SWD
-   switch (56 ones, `0x9E 0xE7`, 56 ones, idle).
-3. **DP/AP transfers** — every register access is a `DAP_Transfer`. AP reads are
-   *posted* on SWD, so each `ap_read` queues the AP read **plus** a DP `RDBUFF`
-   read in the same transfer and takes the `RDBUFF` word — the C equivalent of the
-   "read DRW, then read RDBUFF" dance pyOCD hides.
-4. **DCI** — identical to `dci.py`: connect (check `DCIID == 0xDC11D`), poll
-   `DCISTATUS`, push length + command words to `DCIWDATA`, read responses from
-   `DCIRDATA`. Same command words (`0xFE010000` status, `0x430F0000` erase).
-
-The only subtlety the C code makes explicit that Python didn't: it sets DP
-`SELECT = 0x01000000` by hand (APSEL=1 → the APB-AP, bank 0), because without
-pyOCD nobody is auto-managing `SELECT` for you.
-
-Verified: built with `make` (no warnings) and run against the real probe —
-`./dci status` returns the same lock decode as `dci.py`.
-
-> Note: `dci.c` is the original bare port of the DCI protocol. The richer
-> `status` output (chip identity / EUI-64) and the friendly "no probe" /
-> "no target" error messages were added to **`dci.py` only** — treat `dci.py`
-> as the primary tool and `dci.c` as the minimal reference implementation.
-
----
-
 ## Reproducing on another RODRET
 
 Everything is wrapped in one script:
@@ -279,7 +235,6 @@ Notes:
 | File | What it is |
 |---|---|
 | `dci.py` | EFR32 Series 2 DCI driver over pyOCD: `status` (safe) / `erase` (destructive) |
-| `dci.c` / `Makefile` | Pure-C port of `dci.py` — talks CMSIS-DAP v2 to the probe via libusb, no pyOCD |
 | `blinky.bin` | The 68-byte PC0 blinky image, flashed at `0x0` |
 | `unlock-and-blink.sh` | One-shot reproduce: probe → status → erase → flash → run |
 | `rodret_flash.bin` | 1 MB dump taken before reflashing (mostly `0xFF`; kept for reference) |
