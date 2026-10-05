@@ -237,7 +237,6 @@ Notes:
 | `dci.py` | EFR32 Series 2 DCI driver over pyOCD: `status` (safe) / `erase` (destructive) |
 | `blinky.bin` | The 68-byte PC0 blinky image, flashed at `0x0` |
 | `unlock-and-blink.sh` | One-shot reproduce: probe → status → erase → flash → run |
-| `rodret_flash.bin` | 1 MB dump taken before reflashing (mostly `0xFF`; kept for reference) |
 | `.venv/` | Python venv with `pyocd` 0.45.1 and the MG21 device pack |
 
 ---
